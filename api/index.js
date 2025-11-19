@@ -99,21 +99,45 @@ function applyScanEffect(ctx, width, height) {
     const data = imageData.data;
     
     for (let i = 0; i < data.length; i += 4) {
-        // 1. Grain
         const grain = (Math.random() - 0.5) * 20;
-        
-        // 2. Color shift (cheap printer effect)
-        data[i] += grain + 5;     // slight red tint
-        data[i+1] += grain;       // green
-        data[i+2] += grain - 5;   // slight blue reduction
+        data[i] += grain + 5;     
+        data[i+1] += grain;       
+        data[i+2] += grain - 5;   
     }
     ctx.putImageData(imageData, 0, 0);
 }
+
+// Ensure fonts are registered only once globally
+let fontsRegistered = false;
+
+async function registerAllFonts() {
+    if (fontsRegistered) return;
+
+    try {
+        // Register Arial (or a suitable sans-serif replacement)
+        GlobalFonts.registerFromPath(path.join(process.cwd(), 'fonts', 'Arial.ttf'), 'Arial');
+        // Register a monospace font
+        GlobalFonts.registerFromPath(path.join(process.cwd(), 'fonts', 'RobotoMono-Regular.ttf'), 'Roboto Mono');
+        // Register a Bangla font (e.g., Kalpurush, Noto Sans Bengali)
+        GlobalFonts.registerFromPath(path.join(process.cwd(), 'fonts', 'Kalpurush.ttf'), 'Kalpurush');
+        
+        console.log("[FONTS] All custom fonts registered.");
+        fontsRegistered = true;
+    } catch (error) {
+        console.error("[FONTS] Error registering fonts:", error);
+        // Fallback to generic if custom fonts fail to load
+        console.warn("[FONTS] Falling back to generic system fonts.");
+    }
+}
+
 
 // --- 4. SERVERLESS HANDLER ---
 
 export default async function handler(req, res) {
     try {
+        // Register fonts on every invocation, but prevent duplicate registration
+        await registerAllFonts();
+
         // 1. Setup
         const school = getRandomElement(COLLEGE_DB);
         const identity = generateBdIdentity();
@@ -134,10 +158,7 @@ export default async function handler(req, res) {
         ctx.save();
         ctx.translate(width/2, height/2);
         ctx.rotate(-Math.PI / 6);
-        
-        // Note: System fonts might be limited on Vercel. 
-        // Usually 'sans-serif' maps to a default available font.
-        ctx.font = 'bold 50px sans-serif'; 
+        ctx.font = 'bold 50px Arial'; // Using registered Arial
         ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
         ctx.textAlign = 'center';
         ctx.fillText(school.name.toUpperCase(), 0, 0);
@@ -165,22 +186,21 @@ export default async function handler(req, res) {
         const avatarUrl = 'https://i.imgur.com/3g7nmJC.png'; 
         const avatar = await loadImage(avatarUrl);
         
-        // Draw Photo Frame
         ctx.fillStyle = '#E0E0E0';
-        ctx.fillRect(25, 135, 130, 160); // border
-        ctx.drawImage(avatar, 30, 140, 120, 150); // photo
+        ctx.fillRect(25, 135, 130, 160); 
+        ctx.drawImage(avatar, 30, 140, 120, 150); 
 
         // 5. Text Information
         
-        // School Name
+        // School Name (English + Bangla)
         ctx.fillStyle = '#FFFFFF';
-        ctx.font = 'bold 26px sans-serif';
+        ctx.font = 'bold 26px Arial'; // Using registered Arial
         ctx.textAlign = 'left';
         ctx.fillText(school.name, 20, 50);
         
-        ctx.font = '18px sans-serif';
+        ctx.font = '18px Kalpurush'; // Using registered Bangla font
         ctx.fillStyle = '#EEEEEE';
-        ctx.fillText(school.address, 20, 80);
+        ctx.fillText(school.bnName, 20, 80); // Display Bangla name here
 
         // Student Details
         const labelX = 180;
@@ -192,30 +212,30 @@ export default async function handler(req, res) {
         
         // Name
         ctx.fillStyle = '#555555';
-        ctx.font = '16px sans-serif';
+        ctx.font = '16px Arial'; // Using registered Arial
         ctx.fillText('Name:', labelX, currentY);
         ctx.fillStyle = '#000000';
-        ctx.font = 'bold 22px sans-serif';
+        ctx.font = 'bold 22px Arial'; // Using registered Arial
         ctx.fillText(identity.name.toUpperCase(), valueX, currentY);
         
         currentY += lineHeight;
 
         // ID No
         ctx.fillStyle = '#555555';
-        ctx.font = '16px sans-serif';
+        ctx.font = '16px Arial'; // Using registered Arial
         ctx.fillText('ID No:', labelX, currentY);
         ctx.fillStyle = '#D00000'; 
-        ctx.font = 'bold 22px monospace'; // Monospace for ID often looks better
+        ctx.font = 'bold 22px "Roboto Mono"'; // Using registered monospace font
         ctx.fillText(idNumber, valueX, currentY);
 
         currentY += lineHeight;
 
         // Session/Year
         ctx.fillStyle = '#555555';
-        ctx.font = '16px sans-serif';
+        ctx.font = '16px Arial'; // Using registered Arial
         ctx.fillText('Session:', labelX, currentY);
         ctx.fillStyle = '#000000';
-        ctx.font = '18px sans-serif';
+        ctx.font = '18px Arial'; // Using registered Arial
         ctx.fillText('2024-2025', valueX, currentY);
 
         currentY += lineHeight;
@@ -225,10 +245,10 @@ export default async function handler(req, res) {
         const program = getRandomElement(programs);
         
         ctx.fillStyle = '#555555';
-        ctx.font = '16px sans-serif';
+        ctx.font = '16px Arial'; // Using registered Arial
         ctx.fillText('Program:', labelX, currentY);
         ctx.fillStyle = '#000000';
-        ctx.font = '18px sans-serif';
+        ctx.font = '18px Arial'; // Using registered Arial
         ctx.fillText(program, valueX, currentY);
 
         // 6. Footer / Barcode
@@ -237,17 +257,16 @@ export default async function handler(req, res) {
         
         ctx.fillStyle = '#FFFFFF';
         ctx.textAlign = 'center';
-        ctx.font = '12px sans-serif';
+        ctx.font = '12px Arial'; // Using registered Arial
         ctx.fillText('This card is non-transferable. Return to address above if found.', width/2, 370);
 
         // 7. Final Rendering
         applyScanEffect(ctx, width, height);
 
         // 8. Response Logic
-        const buffer = await canvas.encode('jpeg', { quality: 90 }); // napi-rs syntax is slightly different but cleaner
+        const buffer = await canvas.encode('jpeg', { quality: 90 });
         
         res.setHeader('Content-Type', 'image/jpeg');
-        // Add cache control to prevent caching if you want new random IDs every time
         res.setHeader('Cache-Control', 'no-store, max-age=0'); 
         res.send(buffer);
 
