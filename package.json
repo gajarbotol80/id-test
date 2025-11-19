@@ -1,0 +1,15 @@
+{
+  "name": "gajarbotol-id-forge",
+  "version": "1.0.0",
+  "description": "Bangladeshi Student ID Generator API",
+  "main": "api/index.js",
+  "scripts": {
+    "start": "node api/index.js"
+  },
+  "dependencies": {
+    "@napi-rs/canvas": "^0.1.44"
+  },
+  "engines": {
+    "node": ">=18.x"
+  }
+}
