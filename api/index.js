@@ -1,277 +1,290 @@
-/* PROJECT: GAJARBOTOL ID FORGE ENGINE (BD EDITION) - VERCEL API
-   TYPE: Serverless Image Generation
+/* PROJECT: GAJARBOTOL ID FORGE ENGINE (REALISM EDITION)
+   TYPE: Photorealistic Identity Document Generation
    DEPENDENCIES: @napi-rs/canvas
-   DEPLOYMENT: Vercel / AWS Lambda
 */
 
 const { createCanvas, loadImage, GlobalFonts } = require('@napi-rs/canvas');
 const path = require('path');
 
-// --- 1. BANGLADESHI IDENTITY DATABASE ---
+// --- 1. CONFIGURATION & ASSETS ---
 
-const BD_NAMES = {
-    male: [
-        "Mohammad", "Mehedi", "Tanvir", "Saiful", "Imran", "Rakib", 
-        "Hasan", "Abdullah", "Masud", "Sohel", "Arif", "Rifat", 
-        "Fahim", "Nayeem", "Shakil", "Tamim", "Sabbir"
-    ],
-    female: [
-        "Nusrat", "Farjana", "Sumaiya", "Sadia", "Tanjina", "Moumita", 
-        "Israt", "Jannatul", "Fatema", "Aysha", "Sharmin", "Nadia", 
-        "Rubina", "Shamima", "Purnima", "Riya"
-    ],
-    surnames: [
-        "Islam", "Hossain", "Ahmed", "Khan", "Rahman", "Chowdhury", 
-        "Hasan", "Ali", "Uddin", "Sarker", "Akter", "Begum", 
-        "Majumder", "Sikder", "Miah", "Sheikh", "Bhowmik", "Das"
-    ]
-};
+// Register fonts (ensure these exist in your 'fonts' folder)
+let fontsRegistered = false;
+async function registerFonts() {
+    if (fontsRegistered) return;
+    try {
+        const fontDir = path.join(process.cwd(), 'fonts');
+        GlobalFonts.registerFromPath(path.join(fontDir, 'Arial.ttf'), 'Arial');
+        GlobalFonts.registerFromPath(path.join(fontDir, 'RobotoMono-Regular.ttf'), 'Roboto Mono');
+        GlobalFonts.registerFromPath(path.join(fontDir, 'Kalpurush.ttf'), 'Kalpurush'); // Bangla Font
+        fontsRegistered = true;
+    } catch (e) {
+        console.warn("[SYSTEM] Font registration failed (using system defaults):", e.message);
+    }
+}
 
-// --- 2. REAL COLLEGE DATABASE ---
-
+// --- 2. DATABASE (SAME AS BEFORE) ---
 const COLLEGE_DB = [
     {
         name: "Dhaka College",
         bnName: "ঢাকা কলেজ",
         logoUrl: "https://upload.wikimedia.org/wikipedia/en/thumb/9/9a/Dhaka_College_Logo.svg/1200px-Dhaka_College_Logo.svg.png",
-        primaryColor: "#800000", // Maroon
-        secondaryColor: "#FFD700", // Gold
-        address: "Mirpur Road, Dhaka-1205",
-        idFormat: "DC-24-#####", // Batch 24
-        type: "govt"
+        primaryColor: "#800000", secondaryColor: "#FFD700",
+        address: "Mirpur Road, Dhaka-1205", idFormat: "DC-24-#####", type: "govt"
     },
     {
         name: "North South University",
         bnName: "নর্থ সাউথ ইউনিভার্সিটি",
         logoUrl: "https://upload.wikimedia.org/wikipedia/en/thumb/a/a6/North_South_University_Logo.svg/1200px-North_South_University_Logo.svg.png",
-        primaryColor: "#003366", // NSU Blue
-        secondaryColor: "#FFFFFF",
-        address: "Bashundhara, Dhaka-1229",
-        idFormat: "241####042", // NSU 10 digit format
-        type: "private"
+        primaryColor: "#003366", secondaryColor: "#FFFFFF",
+        address: "Bashundhara, Dhaka-1229", idFormat: "241####042", type: "private"
     },
     {
         name: "Notre Dame College",
         bnName: "নটর ডেম কলেজ",
         logoUrl: "https://upload.wikimedia.org/wikipedia/en/thumb/2/24/Notre_Dame_College_Dhaka_Monogram.svg/800px-Notre_Dame_College_Dhaka_Monogram.svg.png",
-        primaryColor: "#00563F", // NDC Green
-        secondaryColor: "#F1C40F", // Yellow/Cream
-        address: "Arambagh, Motijheel, Dhaka",
-        idFormat: "324####", // Group + Roll
-        type: "govt"
-    },
-    {
-        name: "BRAC University",
-        bnName: "ব্র্যাক ইউনিভার্সিটি",
-        logoUrl: "https://upload.wikimedia.org/wikipedia/en/thumb/5/5c/Brac_University_logo.png/220px-Brac_University_logo.png",
-        primaryColor: "#253494", // BRAC Blue
-        secondaryColor: "#999999", // Silver
-        address: "66 Mohakhali, Dhaka-1212",
-        idFormat: "24101###",
-        type: "private"
+        primaryColor: "#00563F", secondaryColor: "#F1C40F",
+        address: "Arambagh, Motijheel, Dhaka", idFormat: "324####", type: "govt"
     }
 ];
 
-// --- 3. UTILITIES ---
+const BD_NAMES = {
+    male: ["Tanvir", "Saiful", "Imran", "Rakib", "Hasan", "Abdullah", "Fahim", "Nayeem"],
+    female: ["Nusrat", "Farjana", "Sadia", "Moumita", "Israt", "Jannatul", "Aysha"],
+    surnames: ["Islam", "Hossain", "Ahmed", "Khan", "Rahman", "Chowdhury", "Ali", "Sarker"]
+};
 
-function getRandomElement(arr) {
-    return arr[Math.floor(Math.random() * arr.length)];
-}
+// --- 3. REALISM ENGINES ---
 
-function generateBdIdentity() {
-    const gender = Math.random() > 0.3 ? 'male' : 'female'; 
-    const first = getRandomElement(BD_NAMES[gender]);
-    const last = getRandomElement(BD_NAMES.surnames);
-    
-    return {
-        name: `${first} ${last}`,
-        gender: gender,
-        dob: `199${Math.floor(Math.random() * 9)}-${Math.floor(Math.random() * 11) + 1}-${Math.floor(Math.random() * 28) + 1}`
-    };
-}
-
-function generateIdNumber(format) {
-    return format.replace(/#/g, () => Math.floor(Math.random() * 10));
-}
-
-function applyScanEffect(ctx, width, height) {
+function addNoise(ctx, width, height, amount = 0.05) {
     const imageData = ctx.getImageData(0, 0, width, height);
     const data = imageData.data;
-    
     for (let i = 0; i < data.length; i += 4) {
-        const grain = (Math.random() - 0.5) * 20;
-        data[i] += grain + 5;     
-        data[i+1] += grain;       
-        data[i+2] += grain - 5;   
+        const noise = (Math.random() - 0.5) * amount * 255;
+        data[i] += noise;
+        data[i + 1] += noise;
+        data[i + 2] += noise;
     }
     ctx.putImageData(imageData, 0, 0);
 }
 
-// Ensure fonts are registered only once globally
-let fontsRegistered = false;
+function drawHologram(ctx, x, y, size) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'overlay'; // Blends nicely with underlying card
+    ctx.globalAlpha = 0.6;
 
-async function registerAllFonts() {
-    if (fontsRegistered) return;
+    // Create a rainbow gradient
+    const grad = ctx.createLinearGradient(x, y, x + size, y + size);
+    grad.addColorStop(0, 'rgba(255,0,0,0.5)');
+    grad.addColorStop(0.2, 'rgba(255,255,0,0.5)');
+    grad.addColorStop(0.4, 'rgba(0,255,0,0.5)');
+    grad.addColorStop(0.6, 'rgba(0,255,255,0.5)');
+    grad.addColorStop(0.8, 'rgba(0,0,255,0.5)');
+    grad.addColorStop(1, 'rgba(255,0,255,0.5)');
 
-    try {
-        // Register Arial (or a suitable sans-serif replacement)
-        GlobalFonts.registerFromPath(path.join(process.cwd(), 'fonts', 'Arial.ttf'), 'Arial');
-        // Register a monospace font
-        GlobalFonts.registerFromPath(path.join(process.cwd(), 'fonts', 'RobotoMono-Regular.ttf'), 'Roboto Mono');
-        // Register a Bangla font (e.g., Kalpurush, Noto Sans Bengali)
-        GlobalFonts.registerFromPath(path.join(process.cwd(), 'fonts', 'Kalpurush.ttf'), 'Kalpurush');
-        
-        console.log("[FONTS] All custom fonts registered.");
-        fontsRegistered = true;
-    } catch (error) {
-        console.error("[FONTS] Error registering fonts:", error);
-        // Fallback to generic if custom fonts fail to load
-        console.warn("[FONTS] Falling back to generic system fonts.");
-    }
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(x + size/2, y + size/2, size/2, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Add a "Seal" text inside
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+    ctx.font = 'bold 10px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText("OFFICIAL", x + size/2, y + size/2 + 4);
+    
+    ctx.restore();
 }
 
+function addPlasticGlare(ctx, width, height) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen'; // Screen mode makes it look like light reflection
+    const gradient = ctx.createLinearGradient(0, 0, width, height);
+    gradient.addColorStop(0.3, 'rgba(255, 255, 255, 0)');
+    gradient.addColorStop(0.5, 'rgba(255, 255, 255, 0.15)'); // Subtle bright streak
+    gradient.addColorStop(0.55, 'rgba(255, 255, 255, 0.3)'); // Sharp reflection
+    gradient.addColorStop(0.6, 'rgba(255, 255, 255, 0.15)');
+    gradient.addColorStop(0.8, 'rgba(255, 255, 255, 0)');
+    
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, width, height);
+    ctx.restore();
+}
 
-// --- 4. SERVERLESS HANDLER ---
+function generateScratches(ctx, width, height) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'soft-light';
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+    ctx.lineWidth = 1;
+    
+    for(let i=0; i<15; i++) {
+        ctx.beginPath();
+        const x = Math.random() * width;
+        const y = Math.random() * height;
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + (Math.random() * 50 - 25), y + (Math.random() * 50 - 25));
+        ctx.stroke();
+    }
+    ctx.restore();
+}
+
+// --- 4. MAIN GENERATOR ---
 
 export default async function handler(req, res) {
+    await registerFonts();
+
     try {
-        // Register fonts on every invocation, but prevent duplicate registration
-        await registerAllFonts();
+        // --- A. GENERATE RAW CARD (CLEAN) ---
+        const school = COLLEGE_DB[Math.floor(Math.random() * COLLEGE_DB.length)];
+        const gender = Math.random() > 0.3 ? 'male' : 'female';
+        const name = `${BD_NAMES[gender][Math.floor(Math.random() * BD_NAMES[gender].length)]} ${BD_NAMES.surnames[Math.floor(Math.random() * BD_NAMES.surnames.length)]}`;
+        const idNum = school.idFormat.replace(/#/g, () => Math.floor(Math.random() * 10));
 
-        // 1. Setup
-        const school = getRandomElement(COLLEGE_DB);
-        const identity = generateBdIdentity();
-        const idNumber = generateIdNumber(school.idFormat);
+        const cardW = 600;
+        const cardH = 380;
+        const cardCanvas = createCanvas(cardW, cardH);
+        const cCtx = cardCanvas.getContext('2d');
 
-        const width = 600;
-        const height = 380;
-        const canvas = createCanvas(width, height);
-        const ctx = canvas.getContext('2d');
+        // 1. Card Base
+        cCtx.fillStyle = '#FFFFFF';
+        cCtx.fillRect(0, 0, cardW, cardH);
 
-        console.log(`[API LOG] Generating ID for ${identity.name} at ${school.name}`);
+        // 2. Watermark
+        cCtx.save();
+        cCtx.translate(cardW/2, cardH/2);
+        cCtx.rotate(-Math.PI / 6);
+        cCtx.font = 'bold 50px Arial';
+        cCtx.fillStyle = 'rgba(0, 0, 0, 0.04)';
+        cCtx.textAlign = 'center';
+        cCtx.fillText(school.name.toUpperCase(), 0, 0);
+        cCtx.restore();
 
-        // 2. Background Layer
-        ctx.fillStyle = '#FFFFFF';
-        ctx.fillRect(0, 0, width, height);
-        
-        // Watermark (School Name Faded)
-        ctx.save();
-        ctx.translate(width/2, height/2);
-        ctx.rotate(-Math.PI / 6);
-        ctx.font = 'bold 50px Arial'; // Using registered Arial
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
-        ctx.textAlign = 'center';
-        ctx.fillText(school.name.toUpperCase(), 0, 0);
-        ctx.restore();
+        // 3. Header
+        cCtx.fillStyle = school.primaryColor;
+        cCtx.beginPath();
+        cCtx.moveTo(0, 0);
+        cCtx.lineTo(cardW, 0);
+        cCtx.lineTo(cardW, 100);
+        cCtx.lineTo(0, 125); // Slightly more angle
+        cCtx.fill();
 
-        // 3. Header Design
-        ctx.fillStyle = school.primaryColor;
-        ctx.beginPath();
-        ctx.moveTo(0, 0);
-        ctx.lineTo(width, 0);
-        ctx.lineTo(width, 100);
-        ctx.lineTo(0, 120);
-        ctx.closePath();
-        ctx.fill();
-
-        // 4. Logos & Images
+        // 4. Assets (Logo + Photo)
         try {
             const logo = await loadImage(school.logoUrl);
-            ctx.drawImage(logo, width - 110, 20, 80, 80);
-        } catch (e) {
-            console.error('Logo load failed:', e.message);
-        }
+            cCtx.drawImage(logo, cardW - 100, 20, 80, 80);
+        } catch(e) {}
 
-        // Avatar
-        const avatarUrl = 'https://i.imgur.com/3g7nmJC.png'; 
-        const avatar = await loadImage(avatarUrl);
+        const avatar = await loadImage('https://i.imgur.com/3g7nmJC.png'); // Replace with dynamic if available
+        cCtx.fillStyle = '#E5E5E5';
+        cCtx.fillRect(25, 135, 130, 160); // Photo frame
+        cCtx.drawImage(avatar, 30, 140, 120, 150);
+
+        // 5. Text Details
+        cCtx.textAlign = 'left';
         
-        ctx.fillStyle = '#E0E0E0';
-        ctx.fillRect(25, 135, 130, 160); 
-        ctx.drawImage(avatar, 30, 140, 120, 150); 
+        // Header Text
+        cCtx.fillStyle = '#FFFFFF';
+        cCtx.font = 'bold 26px Arial';
+        cCtx.fillText(school.name, 20, 50);
+        cCtx.font = '18px Kalpurush'; // Bangla
+        cCtx.fillStyle = '#E0E0E0';
+        cCtx.fillText(school.bnName, 20, 80);
 
-        // 5. Text Information
+        // Body Text
+        const lx = 180, vx = 280, ly = 165;
+        const row = (label, val, y, isRed=false) => {
+            cCtx.fillStyle = '#555';
+            cCtx.font = '16px Arial';
+            cCtx.fillText(label, lx, y);
+            cCtx.fillStyle = isRed ? '#D00000' : '#000';
+            cCtx.font = isRed ? 'bold 22px "Roboto Mono"' : 'bold 21px Arial';
+            cCtx.fillText(val.toUpperCase(), vx, y);
+        };
+
+        row('Name:', name, ly);
+        row('ID No:', idNum, ly + 35, true);
+        row('Session:', '2024-2025', ly + 70);
+        row('Program:', 'B.Sc in CSE', ly + 105);
+
+        // 6. Footer
+        cCtx.fillStyle = school.primaryColor;
+        cCtx.fillRect(0, 350, cardW, 30);
+        cCtx.fillStyle = '#FFF';
+        cCtx.font = '11px Arial';
+        cCtx.textAlign = 'center';
+        cCtx.fillText('If found, please return to the registrar office.', cardW/2, 368);
+
+        // 7. Apply Card-Level Effects (Hologram + Scratches)
+        drawHologram(cCtx, cardW - 90, 260, 70); // Bottom right seal
+        generateScratches(cCtx, cardW, cardH);
+
+        // --- B. CREATE PHOTOREALISTIC SCENE (TABLETOP) ---
         
-        // School Name (English + Bangla)
-        ctx.fillStyle = '#FFFFFF';
-        ctx.font = 'bold 26px Arial'; // Using registered Arial
-        ctx.textAlign = 'left';
-        ctx.fillText(school.name, 20, 50);
+        // Create a larger canvas for the "Desk"
+        const sceneW = 800;
+        const sceneH = 600;
+        const scene = createCanvas(sceneW, sceneH);
+        const ctx = scene.getContext('2d');
+
+        // 1. Draw Desk Background (Dark Wood/Matte Table texture)
+        ctx.fillStyle = '#222222'; // Dark grey matte desk
+        ctx.fillRect(0, 0, sceneW, sceneH);
         
-        ctx.font = '18px Kalpurush'; // Using registered Bangla font
-        ctx.fillStyle = '#EEEEEE';
-        ctx.fillText(school.bnName, 20, 80); // Display Bangla name here
+        // Add noise to desk
+        addNoise(ctx, sceneW, sceneH, 0.08);
 
-        // Student Details
-        const labelX = 180;
-        const valueX = 280;
-        let currentY = 160;
-        const lineHeight = 35;
+        // 2. Calculate Position (Centered but rotated)
+        const cx = sceneW / 2;
+        const cy = sceneH / 2;
+        const rotation = (Math.random() * 0.1) - 0.05; // Subtle rotation (-0.05 to +0.05 rad)
 
-        ctx.textAlign = 'left';
-        
-        // Name
-        ctx.fillStyle = '#555555';
-        ctx.font = '16px Arial'; // Using registered Arial
-        ctx.fillText('Name:', labelX, currentY);
-        ctx.fillStyle = '#000000';
-        ctx.font = 'bold 22px Arial'; // Using registered Arial
-        ctx.fillText(identity.name.toUpperCase(), valueX, currentY);
-        
-        currentY += lineHeight;
+        ctx.translate(cx, cy);
+        ctx.rotate(rotation);
+        ctx.translate(-cardW/2, -cardH/2); // Center the card in the coordinate system
 
-        // ID No
-        ctx.fillStyle = '#555555';
-        ctx.font = '16px Arial'; // Using registered Arial
-        ctx.fillText('ID No:', labelX, currentY);
-        ctx.fillStyle = '#D00000'; 
-        ctx.font = 'bold 22px "Roboto Mono"'; // Using registered monospace font
-        ctx.fillText(idNumber, valueX, currentY);
+        // 3. Realistic Drop Shadow
+        // We draw a black rect blurred under the card
+        ctx.save();
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+        ctx.shadowBlur = 20; // Soft shadow
+        ctx.shadowOffsetX = 10;
+        ctx.shadowOffsetY = 15; // Light source from top-left
+        ctx.fillRect(5, 5, cardW - 10, cardH - 10); // Slightly smaller rect for shadow
+        ctx.restore();
 
-        currentY += lineHeight;
+        // 4. Place the Generated Card
+        ctx.drawImage(cardCanvas, 0, 0);
 
-        // Session/Year
-        ctx.fillStyle = '#555555';
-        ctx.font = '16px Arial'; // Using registered Arial
-        ctx.fillText('Session:', labelX, currentY);
-        ctx.fillStyle = '#000000';
-        ctx.font = '18px Arial'; // Using registered Arial
-        ctx.fillText('2024-2025', valueX, currentY);
+        // 5. Global Lighting / Glare (Plastic Sheen)
+        // This goes OVER the card to simulate light hitting the plastic sleeve
+        const sheenGrad = ctx.createLinearGradient(0, 0, cardW, cardH);
+        sheenGrad.addColorStop(0, 'rgba(255,255,255,0)');
+        sheenGrad.addColorStop(0.4, 'rgba(255,255,255,0)');
+        sheenGrad.addColorStop(0.5, 'rgba(255,255,255,0.08)'); // Faint reflection line
+        sheenGrad.addColorStop(0.6, 'rgba(255,255,255,0)');
+        ctx.fillStyle = sheenGrad;
+        ctx.fillRect(0, 0, cardW, cardH);
 
-        currentY += lineHeight;
+        // 6. Final Camera Vignette (Darken corners of the whole photo)
+        ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset transform for full screen overlay
+        const vignette = ctx.createRadialGradient(sceneW/2, sceneH/2, sceneH/3, sceneW/2, sceneH/2, sceneW/1.2);
+        vignette.addColorStop(0, 'rgba(0,0,0,0)');
+        vignette.addColorStop(1, 'rgba(0,0,0,0.5)');
+        ctx.fillStyle = vignette;
+        ctx.fillRect(0, 0, sceneW, sceneH);
 
-        // Program
-        const programs = school.type === 'govt' ? ['H.S.C (Science)', 'H.S.C (Business)', 'B.A (Honours)'] : ['B.Sc in CSE', 'BBA', 'EEE'];
-        const program = getRandomElement(programs);
-        
-        ctx.fillStyle = '#555555';
-        ctx.font = '16px Arial'; // Using registered Arial
-        ctx.fillText('Program:', labelX, currentY);
-        ctx.fillStyle = '#000000';
-        ctx.font = '18px Arial'; // Using registered Arial
-        ctx.fillText(program, valueX, currentY);
+        // 7. Final Sensor Noise (ISO Grain)
+        addNoise(ctx, sceneW, sceneH, 0.04);
 
-        // 6. Footer / Barcode
-        ctx.fillStyle = school.primaryColor;
-        ctx.fillRect(0, 350, width, 30);
-        
-        ctx.fillStyle = '#FFFFFF';
-        ctx.textAlign = 'center';
-        ctx.font = '12px Arial'; // Using registered Arial
-        ctx.fillText('This card is non-transferable. Return to address above if found.', width/2, 370);
-
-        // 7. Final Rendering
-        applyScanEffect(ctx, width, height);
-
-        // 8. Response Logic
-        const buffer = await canvas.encode('jpeg', { quality: 90 });
-        
+        // Output
+        const buffer = await scene.encode('jpeg', { quality: 85 }); // JPEG compression adds to realism
         res.setHeader('Content-Type', 'image/jpeg');
-        res.setHeader('Cache-Control', 'no-store, max-age=0'); 
         res.send(buffer);
 
-    } catch (error) {
-        console.error("Generator Error:", error);
-        res.status(500).json({ error: "Internal Server Error", details: error.message });
+    } catch (err) {
+        console.error(err);
+        res.status(500).send("Engine Failure");
     }
 }
